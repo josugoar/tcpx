@@ -12,6 +12,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/select.h>
 #include <sys/socket.h>
 #include <time.h>
 #include <unistd.h>
@@ -360,29 +361,90 @@ int main(void)
         }
     }
 
+    bool eof = false;
+
     while (true)
     {
-        nread = read(STDIN_FILENO, readbuf, sizeof(readbuf));
-        if (nread == -1)
+        while (quic_data_idx < quic_data_tail)
         {
-            fprintf(stderr, "E %s: read: %s\n", TAG, strerror(errno));
+            ssize_t datalen = 0;
+
+            nwrite = ngtcp2_conn_write_stream(conn, &path, NULL, writebuf, sizeof(writebuf), &datalen, NGTCP2_WRITE_STREAM_FLAG_NONE, stream_id, quic_data + quic_data_idx, quic_data_tail - quic_data_idx, timestamp());
+            if (nwrite < 0)
+            {
+                fprintf(stderr, "E %s: ngtcp2_conn_write_stream: %s\n", TAG, ngtcp2_strerror(nwrite));
+                goto cleanup;
+            }
+
+            if (write(fd, writebuf, nwrite) == -1)
+            {
+                fprintf(stderr, "E %s: write: %s\n", TAG, strerror(errno));
+                goto cleanup;
+            }
+
+            if (datalen <= 0)
+            {
+                break;
+            }
+
+            quic_data_idx += datalen;
+        }
+
+        if (!eof && quic_data_tail < sizeof(quic_data))
+        {
+            nread = read(STDIN_FILENO, quic_data + quic_data_tail, sizeof(quic_data) - quic_data_tail);
+            if (nread == -1)
+            {
+                fprintf(stderr, "E %s: read: %s\n", TAG, strerror(errno));
+                goto cleanup;
+            }
+
+            if (nread == 0)
+            {
+                eof = true;
+            }
+
+            quic_data_tail += nread;
+        }
+
+        fd_set readfd_set = {0};
+        FD_ZERO(&readfd_set);
+
+        struct timeval timeout = {0};
+        timeout.tv_usec = 100000;
+
+        FD_SET(fd, &readfd_set);
+
+        int nfds = select(fd + 1, &readfd_set, NULL, NULL, &timeout);
+        if (nfds == -1)
+        {
+            if (errno == EINTR)
+            {
+                continue;
+            }
+
+            fprintf(stderr, "E %s: select: %s\n", TAG, strerror(errno));
             goto cleanup;
         }
 
-        nwrite = ngtcp2_conn_write_stream(conn, &path, NULL, writebuf, sizeof(writebuf), NULL, NGTCP2_WRITE_STREAM_FLAG_NONE, stream_id, readbuf, nread, timestamp());
-        if (nwrite < 0)
+        if (nfds > 0)
         {
-            fprintf(stderr, "E %s: ngtcp2_conn_write_stream: %s\n", TAG, ngtcp2_strerror(nwrite));
-            goto cleanup;
+            nread = read(fd, readbuf, sizeof(readbuf));
+            if (nread == -1)
+            {
+                fprintf(stderr, "E %s: read: %s\n", TAG, strerror(errno));
+                goto cleanup;
+            }
+
+            errnum = ngtcp2_conn_read_pkt(conn, &path, NULL, readbuf, nread, timestamp());
+            if (errnum != 0)
+            {
+                fprintf(stderr, "E %s: ngtcp2_conn_read_pkt: %s\n", TAG, ngtcp2_strerror(errnum));
+                goto cleanup;
+            }
         }
 
-        if (write(fd, writebuf, nwrite) == -1)
-        {
-            fprintf(stderr, "E %s: write: %s\n", TAG, strerror(errno));
-            goto cleanup;
-        }
-
-        if (nread == 0)
+        if (eof && quic_data_idx == quic_data_tail)
         {
             break;
         }

@@ -17,7 +17,65 @@
 #include <wolfssl/certs_test.h>
 #include <wolfssl/ssl.h>
 
-int client_initial_cb(ngtcp2_conn *conn, void *user_data)
+#define QUIC_DATALEN 65536
+#define QUIC_CIDS_LEN 8
+
+typedef struct
+{
+    ngtcp2_cid cid;
+    ngtcp2_conn *conn;
+} quic_cid_t;
+
+static uint8_t quic_data[QUIC_DATALEN] = {0};
+static size_t quic_data_idx = 0;
+static size_t quic_data_head = 0;
+static size_t quic_data_tail = 0;
+
+static quic_cid_t quic_cids[QUIC_CIDS_LEN] = {0};
+
+static void quic_add_connection_id(const ngtcp2_cid *cid, ngtcp2_conn *conn)
+{
+    for (size_t i = 0; i < QUIC_CIDS_LEN; ++i)
+    {
+        quic_cid_t *quic_cid = &quic_cids[i];
+
+        if (quic_cid->conn)
+        {
+            continue;
+        }
+
+        quic_cid->cid = *cid;
+        quic_cid->conn = conn;
+
+        return;
+    }
+
+    fprintf(stderr, "W %s quic_add_connection_id: no space for cid\n", "quic");
+}
+
+static void quic_remove_connection_id(const ngtcp2_cid *cid)
+{
+    for (size_t i = 0; i < QUIC_CIDS_LEN; ++i)
+    {
+        quic_cid_t *quic_cid = &quic_cids[i];
+
+        if (!quic_cid->conn)
+        {
+            continue;
+        }
+
+        if (!ngtcp2_cid_eq(&quic_cid->cid, cid))
+        {
+            continue;
+        }
+
+        memset(quic_cid, 0, sizeof(*quic_cid));
+
+        return;
+    }
+}
+
+static int client_initial_cb(ngtcp2_conn *conn, void *user_data)
 {
     fprintf(stderr, "D %s client_initial_cb\n", "quic");
 
@@ -30,7 +88,7 @@ int client_initial_cb(ngtcp2_conn *conn, void *user_data)
     return errnum;
 }
 
-int recv_client_initial_cb(ngtcp2_conn *conn, const ngtcp2_cid *dcid, void *user_data)
+static int recv_client_initial_cb(ngtcp2_conn *conn, const ngtcp2_cid *dcid, void *user_data)
 {
     fprintf(stderr, "D %s recv_client_initial_cb\n", "quic");
 
@@ -43,7 +101,7 @@ int recv_client_initial_cb(ngtcp2_conn *conn, const ngtcp2_cid *dcid, void *user
     return errnum;
 }
 
-int recv_crypto_data_cb(ngtcp2_conn *conn, ngtcp2_encryption_level encryption_level, uint64_t offset, const uint8_t *data, size_t datalen, void *user_data)
+static int recv_crypto_data_cb(ngtcp2_conn *conn, ngtcp2_encryption_level encryption_level, uint64_t offset, const uint8_t *data, size_t datalen, void *user_data)
 {
     fprintf(stderr, "D %s recv_crypto_data_cb\n", "quic");
 
@@ -56,7 +114,7 @@ int recv_crypto_data_cb(ngtcp2_conn *conn, ngtcp2_encryption_level encryption_le
     return errnum;
 }
 
-int handshake_completed_cb(ngtcp2_conn *conn, void *user_data)
+static int handshake_completed_cb(ngtcp2_conn *conn, void *user_data)
 {
     (void)conn;
     (void)user_data;
@@ -66,7 +124,7 @@ int handshake_completed_cb(ngtcp2_conn *conn, void *user_data)
     return 0;
 }
 
-int recv_version_negotiation_cb(ngtcp2_conn *conn, const ngtcp2_pkt_hd *hd, const uint32_t *sv, size_t nsv, void *user_data)
+static int recv_version_negotiation_cb(ngtcp2_conn *conn, const ngtcp2_pkt_hd *hd, const uint32_t *sv, size_t nsv, void *user_data)
 {
     (void)conn;
     (void)hd;
@@ -79,7 +137,7 @@ int recv_version_negotiation_cb(ngtcp2_conn *conn, const ngtcp2_pkt_hd *hd, cons
     return 0;
 }
 
-int encrypt_cb(uint8_t *dest, const ngtcp2_crypto_aead *aead, const ngtcp2_crypto_aead_ctx *aead_ctx, const uint8_t *plaintext, size_t plaintextlen, const uint8_t *nonce, size_t noncelen, const uint8_t *aad, size_t aadlen)
+static int encrypt_cb(uint8_t *dest, const ngtcp2_crypto_aead *aead, const ngtcp2_crypto_aead_ctx *aead_ctx, const uint8_t *plaintext, size_t plaintextlen, const uint8_t *nonce, size_t noncelen, const uint8_t *aad, size_t aadlen)
 {
     fprintf(stderr, "D %s encrypt_cb\n", "quic");
 
@@ -92,7 +150,7 @@ int encrypt_cb(uint8_t *dest, const ngtcp2_crypto_aead *aead, const ngtcp2_crypt
     return errnum;
 }
 
-int decrypt_cb(uint8_t *dest, const ngtcp2_crypto_aead *aead, const ngtcp2_crypto_aead_ctx *aead_ctx, const uint8_t *ciphertext, size_t ciphertextlen, const uint8_t *nonce, size_t noncelen, const uint8_t *aad, size_t aadlen)
+static int decrypt_cb(uint8_t *dest, const ngtcp2_crypto_aead *aead, const ngtcp2_crypto_aead_ctx *aead_ctx, const uint8_t *ciphertext, size_t ciphertextlen, const uint8_t *nonce, size_t noncelen, const uint8_t *aad, size_t aadlen)
 {
     fprintf(stderr, "D %s decrypt_cb\n", "quic");
 
@@ -105,7 +163,7 @@ int decrypt_cb(uint8_t *dest, const ngtcp2_crypto_aead *aead, const ngtcp2_crypt
     return errnum;
 }
 
-int hp_mask_cb(uint8_t *dest, const ngtcp2_crypto_cipher *hp, const ngtcp2_crypto_cipher_ctx *hp_ctx, const uint8_t *sample)
+static int hp_mask_cb(uint8_t *dest, const ngtcp2_crypto_cipher *hp, const ngtcp2_crypto_cipher_ctx *hp_ctx, const uint8_t *sample)
 {
     fprintf(stderr, "D %s hp_mask_cb\n", "quic");
 
@@ -118,7 +176,7 @@ int hp_mask_cb(uint8_t *dest, const ngtcp2_crypto_cipher *hp, const ngtcp2_crypt
     return errnum;
 }
 
-int recv_stream_data_cb(ngtcp2_conn *conn, uint32_t flags, int64_t stream_id, uint64_t offset, const uint8_t *data, size_t datalen, void *user_data, void *stream_user_data)
+static int recv_stream_data_cb(ngtcp2_conn *conn, uint32_t flags, int64_t stream_id, uint64_t offset, const uint8_t *data, size_t datalen, void *user_data, void *stream_user_data)
 {
     (void)conn;
     (void)flags;
@@ -138,24 +196,29 @@ int recv_stream_data_cb(ngtcp2_conn *conn, uint32_t flags, int64_t stream_id, ui
     return 0;
 }
 
-int acked_stream_data_offset_cb(ngtcp2_conn *conn, int64_t stream_id, uint64_t offset, uint64_t datalen, void *user_data, void *stream_user_data)
+static int acked_stream_data_offset_cb(ngtcp2_conn *conn, int64_t stream_id, uint64_t offset, uint64_t datalen, void *user_data, void *stream_user_data)
 {
     (void)conn;
     (void)stream_id;
     (void)offset;
-    (void)datalen;
     (void)user_data;
     (void)stream_user_data;
 
     fprintf(stderr, "D %s acked_stream_data_offset_cb\n", "quic");
 
-    // TODO: sender frees data passed to write stream data (consume circular buffer or reset normal buffer index)
-    // should write buffer be a global?
+    quic_data_head += datalen;
+
+    if (quic_data_head == quic_data_tail)
+    {
+        quic_data_idx = 0;
+        quic_data_head = 0;
+        quic_data_tail = 0;
+    }
 
     return 0;
 }
 
-int stream_open_cb(ngtcp2_conn *conn, int64_t stream_id, void *user_data)
+static int stream_open_cb(ngtcp2_conn *conn, int64_t stream_id, void *user_data)
 {
     (void)conn;
     (void)stream_id;
@@ -166,7 +229,7 @@ int stream_open_cb(ngtcp2_conn *conn, int64_t stream_id, void *user_data)
     return 0;
 }
 
-int stream_close_cb(ngtcp2_conn *conn, uint32_t flags, int64_t stream_id, uint64_t app_error_code, void *user_data, void *stream_user_data)
+static int stream_close_cb(ngtcp2_conn *conn, uint32_t flags, int64_t stream_id, uint64_t app_error_code, void *user_data, void *stream_user_data)
 {
     (void)conn;
     (void)flags;
@@ -180,7 +243,7 @@ int stream_close_cb(ngtcp2_conn *conn, uint32_t flags, int64_t stream_id, uint64
     return 0;
 }
 
-int recv_stateless_reset_cb(ngtcp2_conn *conn, const ngtcp2_pkt_stateless_reset *sr, void *user_data)
+static int recv_stateless_reset_cb(ngtcp2_conn *conn, const ngtcp2_pkt_stateless_reset *sr, void *user_data)
 {
     (void)conn;
     (void)sr;
@@ -191,7 +254,7 @@ int recv_stateless_reset_cb(ngtcp2_conn *conn, const ngtcp2_pkt_stateless_reset 
     return 0;
 }
 
-int recv_retry_cb(ngtcp2_conn *conn, const ngtcp2_pkt_hd *hd, void *user_data)
+static int recv_retry_cb(ngtcp2_conn *conn, const ngtcp2_pkt_hd *hd, void *user_data)
 {
     fprintf(stderr, "D %s recv_retry_cb\n", "quic");
 
@@ -204,7 +267,7 @@ int recv_retry_cb(ngtcp2_conn *conn, const ngtcp2_pkt_hd *hd, void *user_data)
     return errnum;
 }
 
-int extend_max_local_streams_bidi_cb(ngtcp2_conn *conn, uint64_t max_streams, void *user_data)
+static int extend_max_local_streams_bidi_cb(ngtcp2_conn *conn, uint64_t max_streams, void *user_data)
 {
     (void)conn;
     (void)max_streams;
@@ -228,7 +291,7 @@ int extend_max_local_streams_bidi_cb(ngtcp2_conn *conn, uint64_t max_streams, vo
     return 0;
 }
 
-int extend_max_local_streams_uni_cb(ngtcp2_conn *conn, uint64_t max_streams, void *user_data)
+static int extend_max_local_streams_uni_cb(ngtcp2_conn *conn, uint64_t max_streams, void *user_data)
 {
     (void)conn;
     (void)max_streams;
@@ -239,7 +302,7 @@ int extend_max_local_streams_uni_cb(ngtcp2_conn *conn, uint64_t max_streams, voi
     return 0;
 }
 
-void rand_cb(uint8_t *dest, size_t destlen, const ngtcp2_rand_ctx *rand_ctx)
+static void rand_cb(uint8_t *dest, size_t destlen, const ngtcp2_rand_ctx *rand_ctx)
 {
     (void)rand_ctx;
 
@@ -251,7 +314,7 @@ void rand_cb(uint8_t *dest, size_t destlen, const ngtcp2_rand_ctx *rand_ctx)
     }
 }
 
-int get_new_connection_id_cb(ngtcp2_conn *conn, ngtcp2_cid *cid, uint8_t *token, size_t cidlen, void *user_data)
+static int get_new_connection_id_cb(ngtcp2_conn *conn, ngtcp2_cid *cid, uint8_t *token, size_t cidlen, void *user_data)
 {
     (void)conn;
     (void)user_data;
@@ -275,25 +338,24 @@ int get_new_connection_id_cb(ngtcp2_conn *conn, ngtcp2_cid *cid, uint8_t *token,
         return NGTCP2_ERR_CALLBACK_FAILURE;
     }
 
-    // TODO: server associates cid
+    quic_add_connection_id(cid, conn);
 
     return 0;
 }
 
-int remove_connection_id_cb(ngtcp2_conn *conn, const ngtcp2_cid *cid, void *user_data)
+static int remove_connection_id_cb(ngtcp2_conn *conn, const ngtcp2_cid *cid, void *user_data)
 {
     (void)conn;
-    (void)cid;
     (void)user_data;
 
     fprintf(stderr, "D %s remove_connection_id_cb\n", "quic");
 
-    // TODO: server dissociates cid
+    quic_remove_connection_id(cid);
 
     return 0;
 }
 
-int update_key_cb(ngtcp2_conn *conn, uint8_t *rx_secret, uint8_t *tx_secret, ngtcp2_crypto_aead_ctx *rx_aead_ctx, uint8_t *rx_iv, ngtcp2_crypto_aead_ctx *tx_aead_ctx, uint8_t *tx_iv, const uint8_t *current_rx_secret, const uint8_t *current_tx_secret, size_t secretlen, void *user_data)
+static int update_key_cb(ngtcp2_conn *conn, uint8_t *rx_secret, uint8_t *tx_secret, ngtcp2_crypto_aead_ctx *rx_aead_ctx, uint8_t *rx_iv, ngtcp2_crypto_aead_ctx *tx_aead_ctx, uint8_t *tx_iv, const uint8_t *current_rx_secret, const uint8_t *current_tx_secret, size_t secretlen, void *user_data)
 {
     fprintf(stderr, "D %s update_key_cb\n", "quic");
 
@@ -306,7 +368,7 @@ int update_key_cb(ngtcp2_conn *conn, uint8_t *rx_secret, uint8_t *tx_secret, ngt
     return errnum;
 }
 
-int path_validation_cb(ngtcp2_conn *conn, uint32_t flags, const ngtcp2_path *path, const ngtcp2_path *old_path, ngtcp2_path_validation_result res, void *user_data)
+static int path_validation_cb(ngtcp2_conn *conn, uint32_t flags, const ngtcp2_path *path, const ngtcp2_path *old_path, ngtcp2_path_validation_result res, void *user_data)
 {
     (void)conn;
     (void)flags;
@@ -320,7 +382,7 @@ int path_validation_cb(ngtcp2_conn *conn, uint32_t flags, const ngtcp2_path *pat
     return 0;
 }
 
-int select_preferred_addr_cb(ngtcp2_conn *conn, ngtcp2_path *dest, const ngtcp2_preferred_addr *paddr, void *user_data)
+static int select_preferred_addr_cb(ngtcp2_conn *conn, ngtcp2_path *dest, const ngtcp2_preferred_addr *paddr, void *user_data)
 {
     (void)conn;
     (void)dest;
@@ -332,7 +394,7 @@ int select_preferred_addr_cb(ngtcp2_conn *conn, ngtcp2_path *dest, const ngtcp2_
     return 0;
 }
 
-int stream_reset_cb(ngtcp2_conn *conn, int64_t stream_id, uint64_t final_size, uint64_t app_error_code, void *user_data, void *stream_user_data)
+static int stream_reset_cb(ngtcp2_conn *conn, int64_t stream_id, uint64_t final_size, uint64_t app_error_code, void *user_data, void *stream_user_data)
 {
     (void)conn;
     (void)stream_id;
@@ -346,7 +408,7 @@ int stream_reset_cb(ngtcp2_conn *conn, int64_t stream_id, uint64_t final_size, u
     return 0;
 }
 
-int extend_max_remote_streams_bidi_cb(ngtcp2_conn *conn, uint64_t max_streams, void *user_data)
+static int extend_max_remote_streams_bidi_cb(ngtcp2_conn *conn, uint64_t max_streams, void *user_data)
 {
     (void)conn;
     (void)max_streams;
@@ -357,7 +419,7 @@ int extend_max_remote_streams_bidi_cb(ngtcp2_conn *conn, uint64_t max_streams, v
     return 0;
 }
 
-int extend_max_remote_streams_uni_cb(ngtcp2_conn *conn, uint64_t max_streams, void *user_data)
+static int extend_max_remote_streams_uni_cb(ngtcp2_conn *conn, uint64_t max_streams, void *user_data)
 {
     (void)conn;
     (void)max_streams;
@@ -368,7 +430,7 @@ int extend_max_remote_streams_uni_cb(ngtcp2_conn *conn, uint64_t max_streams, vo
     return 0;
 }
 
-int extend_max_stream_data_cb(ngtcp2_conn *conn, int64_t stream_id, uint64_t max_data, void *user_data, void *stream_user_data)
+static int extend_max_stream_data_cb(ngtcp2_conn *conn, int64_t stream_id, uint64_t max_data, void *user_data, void *stream_user_data)
 {
     (void)conn;
     (void)stream_id;
@@ -381,7 +443,7 @@ int extend_max_stream_data_cb(ngtcp2_conn *conn, int64_t stream_id, uint64_t max
     return 0;
 }
 
-int dcid_status_cb(ngtcp2_conn *conn, ngtcp2_connection_id_status_type type, uint64_t seq, const ngtcp2_cid *cid, const uint8_t *token, void *user_data)
+static int dcid_status_cb(ngtcp2_conn *conn, ngtcp2_connection_id_status_type type, uint64_t seq, const ngtcp2_cid *cid, const uint8_t *token, void *user_data)
 {
     (void)conn;
     (void)type;
@@ -395,7 +457,7 @@ int dcid_status_cb(ngtcp2_conn *conn, ngtcp2_connection_id_status_type type, uin
     return 0;
 }
 
-int handshake_confirmed_cb(ngtcp2_conn *conn, void *user_data)
+static int handshake_confirmed_cb(ngtcp2_conn *conn, void *user_data)
 {
     (void)conn;
     (void)user_data;
@@ -405,7 +467,7 @@ int handshake_confirmed_cb(ngtcp2_conn *conn, void *user_data)
     return 0;
 }
 
-int recv_new_token_cb(ngtcp2_conn *conn, const uint8_t *token, size_t tokenlen, void *user_data)
+static int recv_new_token_cb(ngtcp2_conn *conn, const uint8_t *token, size_t tokenlen, void *user_data)
 {
     (void)conn;
     (void)token;
@@ -417,21 +479,21 @@ int recv_new_token_cb(ngtcp2_conn *conn, const uint8_t *token, size_t tokenlen, 
     return 0;
 }
 
-void delete_crypto_aead_ctx_cb(ngtcp2_conn *conn, ngtcp2_crypto_aead_ctx *aead_ctx, void *user_data)
+static void delete_crypto_aead_ctx_cb(ngtcp2_conn *conn, ngtcp2_crypto_aead_ctx *aead_ctx, void *user_data)
 {
     fprintf(stderr, "D %s delete_crypto_aead_ctx_cb\n", "quic");
 
     ngtcp2_crypto_delete_crypto_aead_ctx_cb(conn, aead_ctx, user_data);
 }
 
-void delete_crypto_cipher_ctx_cb(ngtcp2_conn *conn, ngtcp2_crypto_cipher_ctx *cipher_ctx, void *user_data)
+static void delete_crypto_cipher_ctx_cb(ngtcp2_conn *conn, ngtcp2_crypto_cipher_ctx *cipher_ctx, void *user_data)
 {
     fprintf(stderr, "D %s delete_crypto_cipher_ctx_cb\n", "quic");
 
     ngtcp2_crypto_delete_crypto_cipher_ctx_cb(conn, cipher_ctx, user_data);
 }
 
-int recv_datagram_cb(ngtcp2_conn *conn, uint32_t flags, const uint8_t *data, size_t datalen, void *user_data)
+static int recv_datagram_cb(ngtcp2_conn *conn, uint32_t flags, const uint8_t *data, size_t datalen, void *user_data)
 {
     (void)conn;
     (void)flags;
@@ -444,7 +506,7 @@ int recv_datagram_cb(ngtcp2_conn *conn, uint32_t flags, const uint8_t *data, siz
     return 0;
 }
 
-int ack_datagram_cb(ngtcp2_conn *conn, uint64_t dgram_id, void *user_data)
+static int ack_datagram_cb(ngtcp2_conn *conn, uint64_t dgram_id, void *user_data)
 {
     (void)conn;
     (void)dgram_id;
@@ -455,7 +517,7 @@ int ack_datagram_cb(ngtcp2_conn *conn, uint64_t dgram_id, void *user_data)
     return 0;
 }
 
-int lost_datagram_cb(ngtcp2_conn *conn, uint64_t dgram_id, void *user_data)
+static int lost_datagram_cb(ngtcp2_conn *conn, uint64_t dgram_id, void *user_data)
 {
     (void)conn;
     (void)dgram_id;
@@ -466,7 +528,7 @@ int lost_datagram_cb(ngtcp2_conn *conn, uint64_t dgram_id, void *user_data)
     return 0;
 }
 
-int get_path_challenge_data_cb(ngtcp2_conn *conn, uint8_t *data, void *user_data)
+static int get_path_challenge_data_cb(ngtcp2_conn *conn, uint8_t *data, void *user_data)
 {
     fprintf(stderr, "D %s get_path_challenge_data_cb\n", "quic");
 
@@ -479,7 +541,7 @@ int get_path_challenge_data_cb(ngtcp2_conn *conn, uint8_t *data, void *user_data
     return errnum;
 }
 
-int stream_stop_sending_cb(ngtcp2_conn *conn, int64_t stream_id, uint64_t app_error_code, void *user_data, void *stream_user_data)
+static int stream_stop_sending_cb(ngtcp2_conn *conn, int64_t stream_id, uint64_t app_error_code, void *user_data, void *stream_user_data)
 {
     (void)conn;
     (void)stream_id;
@@ -492,7 +554,7 @@ int stream_stop_sending_cb(ngtcp2_conn *conn, int64_t stream_id, uint64_t app_er
     return 0;
 }
 
-int version_negotiation_cb(ngtcp2_conn *conn, uint32_t version, const ngtcp2_cid *client_dcid, void *user_data)
+static int version_negotiation_cb(ngtcp2_conn *conn, uint32_t version, const ngtcp2_cid *client_dcid, void *user_data)
 {
     fprintf(stderr, "D %s version_negotiation_cb\n", "quic");
 
@@ -505,7 +567,7 @@ int version_negotiation_cb(ngtcp2_conn *conn, uint32_t version, const ngtcp2_cid
     return errnum;
 }
 
-int recv_rx_key_cb(ngtcp2_conn *conn, ngtcp2_encryption_level level, void *user_data)
+static int recv_rx_key_cb(ngtcp2_conn *conn, ngtcp2_encryption_level level, void *user_data)
 {
     (void)conn;
     (void)level;
@@ -516,7 +578,7 @@ int recv_rx_key_cb(ngtcp2_conn *conn, ngtcp2_encryption_level level, void *user_
     return 0;
 }
 
-int recv_tx_key_cb(ngtcp2_conn *conn, ngtcp2_encryption_level level, void *user_data)
+static int recv_tx_key_cb(ngtcp2_conn *conn, ngtcp2_encryption_level level, void *user_data)
 {
     (void)conn;
     (void)level;
@@ -527,7 +589,7 @@ int recv_tx_key_cb(ngtcp2_conn *conn, ngtcp2_encryption_level level, void *user_
     return 0;
 }
 
-int tls_early_data_rejected_cb(ngtcp2_conn *conn, void *user_data)
+static int tls_early_data_rejected_cb(ngtcp2_conn *conn, void *user_data)
 {
     (void)conn;
     (void)user_data;
