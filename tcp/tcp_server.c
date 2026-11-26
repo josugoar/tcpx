@@ -32,6 +32,30 @@ void wolfSSL_log(int log_level, const char *log_message)
     fprintf(stderr, "V %s: %s\n", "wolfssl", log_message);
 }
 
+static void drop_client(int *client_fd, WOLFSSL **ssl, fd_set *next_readfd_set)
+{
+    if (*ssl)
+    {
+        wolfSSL_free(*ssl);
+        *ssl = NULL;
+    }
+
+    if (*client_fd != -1)
+    {
+        if (*client_fd < FD_SETSIZE)
+        {
+            FD_CLR(*client_fd, next_readfd_set);
+        }
+
+        if (close(*client_fd) != 0)
+        {
+            fprintf(stderr, "W %s: close: %s\n", TAG, strerror(errno));
+        }
+
+        *client_fd = -1;
+    }
+}
+
 int main(void)
 {
     struct addrinfo *ais = NULL;
@@ -214,9 +238,6 @@ int main(void)
     size_t nread = 0;
     size_t nwrite = 0;
 
-    // TODO: dont quit if socket error
-    // goto cleanup scoped to loop (maybe if cond goto cleanup)
-
     FD_SET(acceptfd, &next_readfd_set);
 
     while (true)
@@ -271,8 +292,9 @@ int main(void)
                         break;
                     }
 
-                    fprintf(stderr, "E %s: accept: %s\n", TAG, strerror(errno));
-                    goto cleanup;
+                    fprintf(stderr, "W %s: accept: %s\n", TAG, strerror(errno));
+
+                    break;
                 }
 
                 char remote_host[NI_MAXHOST] = "";
@@ -288,36 +310,51 @@ int main(void)
                 WOLFSSL *ssl = wolfSSL_new(ctx);
                 if (!ssl)
                 {
-                    fprintf(stderr, "E %s: wolfSSL_new\n", TAG);
-                    goto cleanup;
+                    fprintf(stderr, "W %s: wolfSSL_new\n", TAG);
+
+                    drop_client(&client_fd, &ssl, &next_readfd_set);
+
+                    break;
                 }
 
                 errnum = wolfSSL_set_fd(ssl, client_fd);
                 if (errnum != WOLFSSL_SUCCESS)
                 {
-                    fprintf(stderr, "E %s: wolfSSL_set_fd: %s\n", TAG, wolfSSL_ERR_reason_error_string(errnum));
-                    goto cleanup;
+                    fprintf(stderr, "W %s: wolfSSL_set_fd: %s\n", TAG, wolfSSL_ERR_reason_error_string(errnum));
+
+                    drop_client(&client_fd, &ssl, &next_readfd_set);
+
+                    break;
                 }
 
                 errnum = wolfSSL_accept(ssl);
                 if (errnum != WOLFSSL_SUCCESS)
                 {
-                    fprintf(stderr, "E %s: wolfSSL_accept: %s\n", TAG, wolfSSL_ERR_reason_error_string(wolfSSL_get_error(ssl, errnum)));
-                    goto cleanup;
+                    fprintf(stderr, "W %s: wolfSSL_accept: %s\n", TAG, wolfSSL_ERR_reason_error_string(wolfSSL_get_error(ssl, errnum)));
+
+                    drop_client(&client_fd, &ssl, &next_readfd_set);
+
+                    break;
                 }
 
                 int readfd = client_fd;
 
                 if (readfd >= FD_SETSIZE)
                 {
-                    fprintf(stderr, "E %s: fd=%d >= FD_SETSIZE\n", TAG, readfd);
-                    goto cleanup;
+                    fprintf(stderr, "W %s: fd=%d >= FD_SETSIZE\n", TAG, readfd);
+
+                    drop_client(&client_fd, &ssl, &next_readfd_set);
+
+                    break;
                 }
 
                 if (fcntl(readfd, F_SETFL, fcntl(readfd, F_GETFL) | O_NONBLOCK) != 0)
                 {
-                    fprintf(stderr, "E %s: fcntl: %s\n", TAG, strerror(errno));
-                    goto cleanup;
+                    fprintf(stderr, "W %s: fcntl: %s\n", TAG, strerror(errno));
+
+                    drop_client(&client_fd, &ssl, &next_readfd_set);
+
+                    break;
                 }
 
                 next_nfds = next_nfds > readfd ? next_nfds : readfd + 1;
@@ -357,8 +394,13 @@ int main(void)
                             break;
                         }
 
-                        fprintf(stderr, "E %s: wolfSSL_read: %s\n", TAG, wolfSSL_ERR_reason_error_string(errnum));
-                        goto cleanup;
+                        fprintf(stderr, "W %s: wolfSSL_read: %s\n", TAG, wolfSSL_ERR_reason_error_string(errnum));
+
+                        drop_client(&readfds[i], &ssls[i], &next_readfd_set);
+
+                        FD_SET(acceptfd, &next_readfd_set);
+
+                        break;
                     }
 
                     if (n == 0)
