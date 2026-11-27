@@ -24,7 +24,7 @@
 #define CLIENTS_LEN 4096
 #define BUF_LEN 1200
 
-static const char *TAG = "tls_server";
+static const char *TAG = "tcp_server";
 
 void wolfSSL_log(int log_level, const char *log_message)
 {

@@ -22,7 +22,7 @@
 #define CTX_CA_CERT ca_cert_der_1024
 #define BUF_LEN 1200
 
-static const char *TAG = "tls_client";
+static const char *TAG = "tcp_client";
 
 void wolfSSL_log(int log_level, const char *log_message)
 {
