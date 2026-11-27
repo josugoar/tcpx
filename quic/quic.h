@@ -242,7 +242,7 @@ static int extend_max_local_streams_bidi_cb(ngtcp2_conn *conn, uint64_t max_stre
     int errnum = ngtcp2_conn_open_bidi_stream(conn, pstream_id, NULL);
     if (errnum != 0)
     {
-        fprintf(stderr, "W %s ngtcp2_conn_open_uni_stream: %s\n", "quic", ngtcp2_strerror(errnum));
+        fprintf(stderr, "W %s ngtcp2_conn_open_bidi_stream: %s\n", "quic", ngtcp2_strerror(errnum));
         return NGTCP2_ERR_CALLBACK_FAILURE;
     }
 
