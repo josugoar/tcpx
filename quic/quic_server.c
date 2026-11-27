@@ -70,9 +70,13 @@ ngtcp2_conn *get_conn(ngtcp2_crypto_conn_ref *conn_ref)
 int main(void)
 {
     struct addrinfo *ais = NULL;
+
     int fd = -1;
+
     WOLFSSL_CTX *ctx = NULL;
+
     WOLFSSL *ssl = NULL;
+
     ngtcp2_conn *conn = NULL;
 
     int errnum = 0;

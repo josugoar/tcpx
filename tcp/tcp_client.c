@@ -34,8 +34,11 @@ void wolfSSL_log(int log_level, const char *log_message)
 int main(void)
 {
     struct addrinfo *ais = NULL;
+
     int client_fd = -1;
+
     WOLFSSL_CTX *ctx = NULL;
+
     WOLFSSL *ssl = NULL;
 
     int errnum = 0;

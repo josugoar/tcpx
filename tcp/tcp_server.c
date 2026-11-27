@@ -36,14 +36,18 @@ void wolfSSL_log(int log_level, const char *log_message)
 int main(void)
 {
     struct addrinfo *ais = NULL;
+
     int client_fds[CLIENTS_LEN] = {0};
     size_t client_fds_len = sizeof(client_fds) / sizeof(*client_fds);
     for (size_t i = 0; i < client_fds_len; ++i)
     {
         client_fds[i] = -1;
     }
+
     int server_fd = -1;
+
     WOLFSSL_CTX *ctx = NULL;
+
     WOLFSSL *ssls[CLIENTS_LEN] = {0};
     size_t ssls_len = sizeof(ssls) / sizeof(*ssls);
     for (size_t i = 0; i < ssls_len; ++i)
