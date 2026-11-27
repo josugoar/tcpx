@@ -77,6 +77,6 @@ tcpx/
 
 - The QUIC client polls its socket for 100 ms after each send rather than running a full event loop, which prevents it from processing ACKs while blocked reading standard input.
 
-- The QUIC server does not handle expiry gracefully so a delayed ACK for a single final data packet is not flushed, which may cause the client to not receive an ACK for the last chunk and for the loss recovery and idle timeouts to remain inactive.
+- The QUIC server cannot service multiple simultaneous clients and does not handle expiry gracefully so a delayed ACK for a single final data packet is not flushed, which may cause the client to not receive an ACK for the last chunk and for the loss recovery and idle timeouts to remain inactive.
 
 - The QUIC data buffer does not wrap or compact, so a stream larger than `QUIC_DATALEN` that is not acknowledged before the buffer fills will stop accepting new input until the indexes reset.
