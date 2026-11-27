@@ -20,7 +20,7 @@
 #define NAME "localhost"
 #define SERVICE "1025"
 #define CTX_CA_CERT ca_cert_der_1024
-#define BUF_LEN 1200
+#define BUF_LEN 65536
 
 static const char *TAG = "tcp_client";
 

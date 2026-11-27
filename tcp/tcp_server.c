@@ -21,8 +21,8 @@
 #define SERVICE "1025"
 #define CTX_SERVER_CERT server_cert_der_1024
 #define CTX_SERVER_KEY server_key_der_1024
-#define CLIENTS_LEN 4096
-#define BUF_LEN 1200
+#define CLIENTS_LEN 8
+#define BUF_LEN 65536
 
 static const char *TAG = "tcp_server";
 
