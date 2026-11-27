@@ -1,5 +1,5 @@
 CC = gcc
-CFLAGS = -fdiagnostics-color=always -g -Wall -Wextra
+CFLAGS = -std=gnu23 -fdiagnostics-color=always -g -Wall -Wextra
 QUIC_LIBS = -lngtcp2 -lngtcp2_crypto_wolfssl -lwolfssl
 TCP_LIBS = -lwolfssl
 
