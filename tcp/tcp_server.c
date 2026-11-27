@@ -33,30 +33,6 @@ void wolfSSL_log(int log_level, const char *log_message)
     fprintf(stderr, "V %s: %s\n", "wolfssl", log_message);
 }
 
-static void drop_client(int *client_fd, WOLFSSL **ssl, fd_set *next_readfd_set)
-{
-    if (*ssl)
-    {
-        wolfSSL_free(*ssl);
-        *ssl = NULL;
-    }
-
-    if (*client_fd != -1)
-    {
-        if (*client_fd < FD_SETSIZE)
-        {
-            FD_CLR(*client_fd, next_readfd_set);
-        }
-
-        if (close(*client_fd) != 0)
-        {
-            fprintf(stderr, "W %s: close: %s\n", TAG, strerror(errno));
-        }
-
-        *client_fd = -1;
-    }
-}
-
 int main(void)
 {
     struct addrinfo *ais = NULL;
@@ -313,7 +289,11 @@ int main(void)
                 {
                     fprintf(stderr, "W %s: wolfSSL_new\n", TAG);
 
-                    drop_client(&client_fd, &ssl, &next_readfd_set);
+                    if (close(client_fd) != 0)
+                    {
+                        fprintf(stderr, "W %s: close: %s\n", TAG, strerror(errno));
+                    }
+                    client_fd = -1;
 
                     break;
                 }
@@ -323,7 +303,14 @@ int main(void)
                 {
                     fprintf(stderr, "W %s: wolfSSL_set_fd: %s\n", TAG, wolfSSL_ERR_reason_error_string(errnum));
 
-                    drop_client(&client_fd, &ssl, &next_readfd_set);
+                    wolfSSL_free(ssl);
+                    ssl = NULL;
+
+                    if (close(client_fd) != 0)
+                    {
+                        fprintf(stderr, "W %s: close: %s\n", TAG, strerror(errno));
+                    }
+                    client_fd = -1;
 
                     break;
                 }
@@ -333,7 +320,14 @@ int main(void)
                 {
                     fprintf(stderr, "W %s: wolfSSL_accept: %s\n", TAG, wolfSSL_ERR_reason_error_string(wolfSSL_get_error(ssl, errnum)));
 
-                    drop_client(&client_fd, &ssl, &next_readfd_set);
+                    wolfSSL_free(ssl);
+                    ssl = NULL;
+
+                    if (close(client_fd) != 0)
+                    {
+                        fprintf(stderr, "W %s: close: %s\n", TAG, strerror(errno));
+                    }
+                    client_fd = -1;
 
                     break;
                 }
@@ -344,7 +338,15 @@ int main(void)
                 {
                     fprintf(stderr, "W %s: fd=%d >= FD_SETSIZE\n", TAG, readfd);
 
-                    drop_client(&client_fd, &ssl, &next_readfd_set);
+                    wolfSSL_free(ssl);
+                    ssl = NULL;
+
+                    if (close(readfd) != 0)
+                    {
+                        fprintf(stderr, "W %s: close: %s\n", TAG, strerror(errno));
+                    }
+                    readfd = -1;
+                    client_fd = -1;
 
                     break;
                 }
@@ -353,7 +355,15 @@ int main(void)
                 {
                     fprintf(stderr, "W %s: fcntl: %s\n", TAG, strerror(errno));
 
-                    drop_client(&client_fd, &ssl, &next_readfd_set);
+                    wolfSSL_free(ssl);
+                    ssl = NULL;
+
+                    if (close(readfd) != 0)
+                    {
+                        fprintf(stderr, "W %s: close: %s\n", TAG, strerror(errno));
+                    }
+                    readfd = -1;
+                    client_fd = -1;
 
                     break;
                 }
@@ -397,7 +407,18 @@ int main(void)
 
                         fprintf(stderr, "W %s: wolfSSL_read: %s\n", TAG, wolfSSL_ERR_reason_error_string(errnum));
 
-                        drop_client(&readfds[i], &ssls[i], &next_readfd_set);
+                        FD_CLR(readfd, &next_readfd_set);
+
+                        wolfSSL_free(ssl);
+                        ssl = NULL;
+                        ssls[i] = NULL;
+
+                        if (close(readfd) != 0)
+                        {
+                            fprintf(stderr, "W %s: close: %s\n", TAG, strerror(errno));
+                        }
+                        readfd = -1;
+                        readfds[i] = -1;
 
                         FD_SET(acceptfd, &next_readfd_set);
 
