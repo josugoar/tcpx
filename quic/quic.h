@@ -33,48 +33,6 @@ static size_t quic_data_tail = 0;
 
 static quic_cid_t quic_cids[QUIC_CIDS_LEN] = {0};
 
-static void quic_add_connection_id(const ngtcp2_cid *cid, ngtcp2_conn *conn)
-{
-    for (size_t i = 0; i < QUIC_CIDS_LEN; ++i)
-    {
-        quic_cid_t *quic_cid = &quic_cids[i];
-
-        if (quic_cid->conn)
-        {
-            continue;
-        }
-
-        quic_cid->cid = *cid;
-        quic_cid->conn = conn;
-
-        return;
-    }
-
-    fprintf(stderr, "W %s quic_add_connection_id: no space for cid\n", "quic");
-}
-
-static void quic_remove_connection_id(const ngtcp2_cid *cid)
-{
-    for (size_t i = 0; i < QUIC_CIDS_LEN; ++i)
-    {
-        quic_cid_t *quic_cid = &quic_cids[i];
-
-        if (!quic_cid->conn)
-        {
-            continue;
-        }
-
-        if (!ngtcp2_cid_eq(&quic_cid->cid, cid))
-        {
-            continue;
-        }
-
-        memset(quic_cid, 0, sizeof(*quic_cid));
-
-        return;
-    }
-}
-
 static int client_initial_cb(ngtcp2_conn *conn, void *user_data)
 {
     fprintf(stderr, "D %s client_initial_cb\n", "quic");
@@ -337,9 +295,22 @@ static int get_new_connection_id_cb(ngtcp2_conn *conn, ngtcp2_cid *cid, uint8_t 
         return NGTCP2_ERR_CALLBACK_FAILURE;
     }
 
-    quic_add_connection_id(cid, conn);
+    for (size_t i = 0; i < QUIC_CIDS_LEN; ++i)
+    {
+        quic_cid_t *quic_cid = &quic_cids[i];
 
-    return 0;
+        if (quic_cid->conn)
+        {
+            continue;
+        }
+
+        quic_cid->cid = *cid;
+        quic_cid->conn = conn;
+
+        return 0;
+    }
+
+    return NGTCP2_ERR_CALLBACK_FAILURE;
 }
 
 static int remove_connection_id_cb(ngtcp2_conn *conn, const ngtcp2_cid *cid, void *user_data)
@@ -349,9 +320,26 @@ static int remove_connection_id_cb(ngtcp2_conn *conn, const ngtcp2_cid *cid, voi
 
     fprintf(stderr, "D %s remove_connection_id_cb\n", "quic");
 
-    quic_remove_connection_id(cid);
+    for (size_t i = 0; i < QUIC_CIDS_LEN; ++i)
+    {
+        quic_cid_t *quic_cid = &quic_cids[i];
 
-    return 0;
+        if (!quic_cid->conn)
+        {
+            continue;
+        }
+
+        if (!ngtcp2_cid_eq(&quic_cid->cid, cid))
+        {
+            continue;
+        }
+
+        memset(quic_cid, 0, sizeof(*quic_cid));
+
+        return 0;
+    }
+
+    return NGTCP2_ERR_CALLBACK_FAILURE;
 }
 
 static int update_key_cb(ngtcp2_conn *conn, uint8_t *rx_secret, uint8_t *tx_secret, ngtcp2_crypto_aead_ctx *rx_aead_ctx, uint8_t *rx_iv, ngtcp2_crypto_aead_ctx *tx_aead_ctx, uint8_t *tx_iv, const uint8_t *current_rx_secret, const uint8_t *current_tx_secret, size_t secretlen, void *user_data)
