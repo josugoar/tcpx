@@ -26,7 +26,7 @@ typedef struct
     ngtcp2_conn *conn;
 } quic_cid_t;
 
-static uint8_t quic_data[QUIC_DATALEN] = {0};
+[[maybe_unused]] static uint8_t quic_data[QUIC_DATALEN] = {0};
 static size_t quic_data_idx = 0;
 static size_t quic_data_head = 0;
 static size_t quic_data_tail = 0;
