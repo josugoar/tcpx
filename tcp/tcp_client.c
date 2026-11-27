@@ -311,7 +311,7 @@ int main(void)
 
     if (wolfSSL_shutdown(ssl) != 0)
     {
-        fprintf(stderr, "W %s: wolfSSL_shutdown: %s\n", TAG, client_fd, wolfSSL_ERR_reason_error_string(wolfSSL_get_error(ssl, WOLFSSL_FATAL_ERROR)));
+        fprintf(stderr, "W %s: wolfSSL_shutdown: %s\n", TAG, wolfSSL_ERR_reason_error_string(wolfSSL_get_error(ssl, WOLFSSL_FATAL_ERROR)));
     }
 
 cleanup:
