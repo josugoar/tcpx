@@ -28,14 +28,14 @@
 
 static const char *TAG = "quic_server";
 
-void wolfSSL_log(int log_level, const char *log_message)
+static void wolfSSL_log(int log_level, const char *log_message)
 {
     (void)log_level;
 
     fprintf(stderr, "V %s %s\n", "wolfSSL", log_message);
 }
 
-void ngtcp2_log(void *user_data, const char *format, ...)
+static void ngtcp2_log(void *user_data, const char *format, ...)
 {
     (void)user_data;
 
@@ -49,7 +49,7 @@ void ngtcp2_log(void *user_data, const char *format, ...)
     va_end(arg);
 }
 
-ngtcp2_tstamp timestamp(void)
+static ngtcp2_tstamp timestamp(void)
 {
     struct timespec tp = {0};
 
@@ -62,7 +62,7 @@ ngtcp2_tstamp timestamp(void)
     return tp.tv_sec * NGTCP2_SECONDS + tp.tv_nsec * NGTCP2_NANOSECONDS;
 }
 
-ngtcp2_conn *get_conn(ngtcp2_crypto_conn_ref *conn_ref)
+static ngtcp2_conn *get_conn(ngtcp2_crypto_conn_ref *conn_ref)
 {
     return (ngtcp2_conn *)conn_ref->user_data;
 }

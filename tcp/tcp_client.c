@@ -24,7 +24,7 @@
 
 static const char *TAG = "tcp_client";
 
-void wolfSSL_log(int log_level, const char *log_message)
+static void wolfSSL_log(int log_level, const char *log_message)
 {
     (void)log_level;
 
