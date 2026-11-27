@@ -316,7 +316,6 @@ static void rand_cb(uint8_t *dest, size_t destlen, const ngtcp2_rand_ctx *rand_c
 
 static int get_new_connection_id_cb(ngtcp2_conn *conn, ngtcp2_cid *cid, uint8_t *token, size_t cidlen, void *user_data)
 {
-    (void)conn;
     (void)user_data;
 
     fprintf(stderr, "D %s get_new_connection_id_cb\n", "quic");
