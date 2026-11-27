@@ -17,21 +17,21 @@ Both services listen on port `1025` over TCP and UDP respectively.
 
 ### TCP
 
-1. Start the server in one terminal:
+1. Start the server in one terminal.
 
    ```sh
    cd tcpx
    ./tcp/tcp_server.out
    ```
 
-2. In a second terminal, send a line to the client:
+2. In a second terminal, send a line to the client.
 
    ```sh
    cd tcpx
    printf 'hello over tcp\n' | ./tcp/tcp_client.out
    ```
 
-3. The server's terminal shows the line:
+3. The server's terminal shows the line.
 
    ```
    hello over tcp
@@ -39,21 +39,21 @@ Both services listen on port `1025` over TCP and UDP respectively.
 
 ### QUIC
 
-1. Start the server in one terminal:
+1. Start the server in one terminal.
 
    ```sh
    cd tcpx
    ./quic/quic_server.out 2> quic-server.log
    ```
 
-2. In a second terminal, send a line to the client:
+2. In a second terminal, send a line to the client.
 
    ```sh
    cd tcpx
    printf 'hello over quic\n' | ./quic/quic_client.out 2> quic-client.log
    ```
 
-3. The server's terminal shows the line:
+3. The server's terminal shows the line.
 
    ```
    hello over quic
