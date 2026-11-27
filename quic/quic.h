@@ -17,21 +17,21 @@
 #include <wolfssl/certs_test.h>
 #include <wolfssl/ssl.h>
 
-#define QUIC_DATALEN 65536
-#define QUIC_CIDS_LEN 8
+#define CIDS_LEN 8
+#define BUF_LEN 65536
 
 typedef struct
 {
     ngtcp2_cid cid;
     ngtcp2_conn *conn;
-} quic_cid_t;
+} cid_t;
 
-[[maybe_unused]] static uint8_t quic_data[QUIC_DATALEN] = {0};
-static size_t quic_data_idx = 0;
-static size_t quic_data_head = 0;
-static size_t quic_data_tail = 0;
+[[maybe_unused]] static uint8_t data[BUF_LEN] = {0};
+static size_t data_idx = 0;
+static size_t data_head = 0;
+static size_t data_tail = 0;
 
-static quic_cid_t quic_cids[QUIC_CIDS_LEN] = {0};
+static cid_t cids[CIDS_LEN] = {0};
 
 static int client_initial_cb(ngtcp2_conn *conn, void *user_data)
 {
@@ -164,13 +164,13 @@ static int acked_stream_data_offset_cb(ngtcp2_conn *conn, int64_t stream_id, uin
 
     fprintf(stderr, "D %s acked_stream_data_offset_cb\n", "quic");
 
-    quic_data_head += datalen;
+    data_head += datalen;
 
-    if (quic_data_head == quic_data_tail)
+    if (data_head == data_tail)
     {
-        quic_data_idx = 0;
-        quic_data_head = 0;
-        quic_data_tail = 0;
+        data_idx = 0;
+        data_head = 0;
+        data_tail = 0;
     }
 
     return 0;
@@ -295,9 +295,9 @@ static int get_new_connection_id_cb(ngtcp2_conn *conn, ngtcp2_cid *cid, uint8_t 
         return NGTCP2_ERR_CALLBACK_FAILURE;
     }
 
-    for (size_t i = 0; i < QUIC_CIDS_LEN; ++i)
+    for (size_t i = 0; i < CIDS_LEN; ++i)
     {
-        quic_cid_t *quic_cid = &quic_cids[i];
+        cid_t *quic_cid = &cids[i];
 
         if (quic_cid->conn)
         {
@@ -320,9 +320,9 @@ static int remove_connection_id_cb(ngtcp2_conn *conn, const ngtcp2_cid *cid, voi
 
     fprintf(stderr, "D %s remove_connection_id_cb\n", "quic");
 
-    for (size_t i = 0; i < QUIC_CIDS_LEN; ++i)
+    for (size_t i = 0; i < CIDS_LEN; ++i)
     {
-        quic_cid_t *quic_cid = &quic_cids[i];
+        cid_t *quic_cid = &cids[i];
 
         if (!quic_cid->conn)
         {

@@ -369,11 +369,11 @@ int main(void)
 
     while (true)
     {
-        while (quic_data_idx < quic_data_tail)
+        while (data_idx < data_tail)
         {
             ssize_t datalen = 0;
 
-            nwrite = ngtcp2_conn_write_stream(conn, &path, NULL, writebuf, sizeof(writebuf), &datalen, NGTCP2_WRITE_STREAM_FLAG_NONE, stream_id, quic_data + quic_data_idx, quic_data_tail - quic_data_idx, timestamp());
+            nwrite = ngtcp2_conn_write_stream(conn, &path, NULL, writebuf, sizeof(writebuf), &datalen, NGTCP2_WRITE_STREAM_FLAG_NONE, stream_id, data + data_idx, data_tail - data_idx, timestamp());
             if (nwrite < 0)
             {
                 fprintf(stderr, "E %s: ngtcp2_conn_write_stream: %s\n", TAG, ngtcp2_strerror(nwrite));
@@ -391,12 +391,12 @@ int main(void)
                 break;
             }
 
-            quic_data_idx += datalen;
+            data_idx += datalen;
         }
 
-        if (!eof && quic_data_tail < sizeof(quic_data))
+        if (!eof && data_tail < sizeof(data))
         {
-            nread = read(STDIN_FILENO, quic_data + quic_data_tail, sizeof(quic_data) - quic_data_tail);
+            nread = read(STDIN_FILENO, data + data_tail, sizeof(data) - data_tail);
             if (nread == -1)
             {
                 fprintf(stderr, "E %s: read: %s\n", TAG, strerror(errno));
@@ -408,7 +408,7 @@ int main(void)
                 eof = true;
             }
 
-            quic_data_tail += nread;
+            data_tail += nread;
         }
 
         fd_set readfd_set = {0};
@@ -448,7 +448,7 @@ int main(void)
             }
         }
 
-        if (eof && quic_data_idx == quic_data_tail)
+        if (eof && data_idx == data_tail)
         {
             break;
         }
