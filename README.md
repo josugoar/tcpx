@@ -1,6 +1,6 @@
 # tcpx
 
-> Embedded quic and tcp client and server
+> Embedded QUIC and TCP client and server
 
 ## Build
 
